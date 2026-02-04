@@ -1,0 +1,15 @@
+# Data Manipulation
+pandas
+numpy
+
+# Machine Learning & Stats
+scikit-learn
+scipy
+
+# understat wrapper
+understatapi
+
+# textual (UI)
+textual
+textual-dev
+textual-pandas

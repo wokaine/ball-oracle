@@ -1,0 +1,166 @@
+from textual.app import App, ComposeResult
+from textual.containers import Horizontal, Vertical, VerticalScroll, HorizontalScroll
+from textual.widgets import Header, Static, Footer, OptionList, Placeholder, Checkbox, Button, Input
+from textual.screen import Screen
+from textual_pandas.widgets import DataFrameTable
+from textual.widgets.option_list import Option
+import random
+import constants
+from lib import utils
+from hiddengemfinder.hidden_gem_finder import HiddenGemFinder
+
+from textual import log
+
+############################
+### MAIN MENU COMPONENTS ###
+############################
+
+class AppHeader(Static):
+    def compose(self) -> ComposeResult:
+        random_quote = random.choice(constants.QUOTES)
+        yield Static(constants.MOTD_APP, id="main-ascii-art", expand=True)
+        yield Static(f"[i]{random_quote[0]}[/i] - {random_quote[1]}")
+
+class AboutPanel(Static):
+    def compose(self) -> ComposeResult:
+        yield Static(constants.ABOUT_MAIN, id="main-about-text")
+
+class ProgramMenu(Vertical):
+    def compose(self) -> ComposeResult:
+        yield Static("[reverse] PROGRAM SELECT [/]")
+        yield OptionList(
+            Option("Hidden Gem Finder", id="hgf"),
+            Option("Comeback Calculator (WIP)", id="cbc"),
+            Option("Market Value Predictor (WIP)", id="mvp"),
+            id="main-menu-list"
+        )
+
+class MainMenu(Screen):
+    def compose(self) -> ComposeResult:
+        yield Header()
+        with Horizontal(id="main-top-section", classes="top"):
+            yield AppHeader(classes="header")
+            yield AboutPanel(classes="about")
+        yield ProgramMenu()
+        yield Footer()
+
+####################################
+### HIDDEN GEM FINDER COMPONENTS ###
+####################################
+        
+class HGFHeader(Static):
+    def compose(self) -> ComposeResult:
+        yield Static(constants.MOTD_HGF, id="hgf-ascii-art", expand=True)
+
+class HGFAbout(Static):
+    def compose(self) -> ComposeResult:
+        yield Static(constants.ABOUT_HGF, id="hgf-about")
+
+class HGFLeft(Static):
+    def compose(self) -> ComposeResult:
+        with Vertical():
+            with VerticalScroll(id="hgf-vscrollbox"):
+                yield Checkbox("Premier League", id="EPL")
+                yield Checkbox("La Liga", id="La_Liga")
+                yield Checkbox("Bundesliga", id="Bundesliga")
+                yield Checkbox("Serie A", id="Serie_A")
+                yield Checkbox("Ligue 1", id="Ligue_1")
+                yield Checkbox("Russian Premier League", id="RFPL")
+            yield Input(placeholder="Search for a player", type="text")
+            yield Button("Submit", id="hgf-submit")
+
+class HGFBody(Static):
+    def compose(self) -> ComposeResult:
+        with Horizontal():
+            yield HGFLeft()
+            with HorizontalScroll(id="hgf-hscrollbox"):
+                yield DataFrameTable()
+    
+    def on_mount(self) -> None:
+        self.hgf = HiddenGemFinder()
+
+        checkbox = self.query_one(VerticalScroll)
+        checkbox.border_title = "League"
+
+        dftable = self.query_one(HorizontalScroll)
+        dftable.border_title = "Results"
+    
+    def on_button_pressed(self) -> None:
+        leagues = [cb.id for cb in self.query(Checkbox) if cb.value]
+        player = self.query_one(Input).value
+        if len(leagues) > 0:
+            df = self.execute_hgf(leagues=leagues, player=player)
+            dftable = self.query_one(DataFrameTable)
+            dftable.update_df(df)
+
+    def execute_hgf(self, leagues, player=''):
+        self.hgf.update_league(leagues=leagues)
+        data_all = self.hgf.data
+        if player == '':
+            return data_all
+        else:
+            self.hgf.update_player(player=player)
+            similar_players = self.hgf.get_query()
+            if similar_players is not None:  
+                # i.e. player found       
+                return similar_players
+            return data_all
+        
+
+class HiddenGemFinderScreen(Screen):
+    def compose(self) -> ComposeResult:
+        yield Header()
+        with Horizontal(id="hgf-top-section", classes="top"):
+            yield HGFHeader(classes="header")
+            yield HGFAbout(classes="about")
+        yield HGFBody()
+        yield Footer()
+
+######################################
+### COMEBACK CALCULATOR COMPONENTS ###
+######################################
+
+
+class ComebackCalculator(Screen):
+    def compose(self) -> ComposeResult:
+        yield Header()
+        yield Placeholder("Comeback Calculator")
+        yield Footer()
+
+#########################################
+### MARKET VALUE PREDICTOR COMPONENTS ###
+#########################################
+
+class MarketValuePredictor(Screen):
+    def compose(self) -> ComposeResult:
+        yield Header()
+        yield Placeholder("Market Value Predictor")
+        yield Footer()
+
+class BallOracle(App):
+    """Main UI for the Ball Oracle program"""
+
+    CSS_PATH = "./style/main.tcss"
+
+    MODES = {
+        "main menu": MainMenu,
+        "hgf": HiddenGemFinderScreen,
+        "cbc": ComebackCalculator,
+        "mvp": MarketValuePredictor
+    }
+
+    BINDINGS = [
+        ("q", "quit", "Quit"),
+        ("b", "switch_mode('main menu')", "Back")
+    ]
+
+    # Default
+    def on_mount(self) -> None:
+        self.switch_mode("main menu")
+
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected):
+        self.switch_mode(event.option_id)
+
+if __name__ == "__main__":
+    app = BallOracle()
+    app.run()

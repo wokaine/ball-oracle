@@ -1,0 +1,66 @@
+/* Ensure the top section doesn't squash the about panel */
+.top {
+    height: 12;
+    width: 100%;
+}
+
+#hgf-vscrollbox {
+    border: double $primary;
+    border-title-align: left;
+    border-title-style: bold;
+    padding: 1;
+    height: auto;
+    width: 100%;
+}
+
+.header {
+    width: 60%;      /* Limit the ASCII art to 60% of the screen */
+    height: 100%;
+    padding: 1;
+}
+
+.about {
+    width: 40%;      /* Give the About text the remaining 40% */
+    height: 100%;
+    padding: 1;
+    border-left: solid $primary;
+    border-bottom: solid $primary;
+}
+
+HGFLeft {
+    width: 20%;
+    height: 100%;
+}
+
+Button {
+    margin: 1;
+}
+
+DataFrameTable {
+    width: 100%;
+    height: 100%;
+    overflow: auto auto;
+}
+
+#hgf-hscrollbox {
+    padding: 2;
+    width: 80%;
+    height: 100%;
+    border: double $primary;
+    border-title-align: center;
+    border-title-style: bold;
+    align: center middle;
+}
+
+/* Ensure the ASCII doesn't wrap or push boundaries */
+#ascii-art {
+    width: 100%;
+    content-align: center middle;
+    color: $accent;
+}
+
+#main-menu-list {
+    height: 1fr;
+    border: tall $primary;
+    margin: 1;
+}
