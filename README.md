@@ -11,7 +11,7 @@ A collection of football themed machine learning projects presented in a termina
 
 Author: Freddie Butterfield (wokaine)
 
-![Image of home screen](img\BallOracle_2026-02-04T22_02_03_873285.svg)
+![Image of home screen](img/BallOracle_2026-02-04T22_02_03_873285.svg)
 
 ### About
 For a while I was struggling to motivate myself to develop programs that were beyond what I was already doing at university. Then I had the realisation to combine my interests with computer science, and this project is the result of that.
@@ -33,7 +33,7 @@ This is nicely wrapped up in a [library](https://github.com/collinb9/understatAP
 [Textual](https://github.com/Textualize/textual) is used for the UI of the project.
 
 ### Hidden Gem Finder
-![Image of Hidden Gem Finder](img\BallOracle_2026-02-04T22_02_55_829795.svg)
+![Image of Hidden Gem Finder](img/BallOracle_2026-02-04T22_02_55_829795.svg)
 
 The Hidden Gem Finder aims to group players into clusters based on the features provided by Understat through [K-means Clustering](https://en.wikipedia.org/wiki/K-means_clustering). You can then search for a player and analyse the cluster to find players who have a similar play style but are maybe a bit more underrated or underutilised by their team, which could be potentially useful from a recruitment perspective.
 
