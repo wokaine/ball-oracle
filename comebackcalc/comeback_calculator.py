@@ -1,5 +1,6 @@
+import joblib
 from sklearn.metrics import brier_score_loss, accuracy_score, confusion_matrix, classification_report
-from sklearn.calibration import calibration_curve
+from sklearn.calibration import calibration_curve, CalibratedClassifierCV
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
@@ -30,30 +31,38 @@ DATA_URLS = [
 FEATURES = ['Trailing_Team', 'Leading_Team', 'Trailing_Odds', 'Leading_Odds', 'Is_Trailing_Team_Home', 'Deficit', 'Odds_Diff']
 
 class ComebackCalculator():
-    def __init__(self, train, valid, test, model_file=None):
-        self.model_file = model_file
+    def __init__(self, train, valid, test, xgb_model_file=None, calib_model_file=None):
+        self.model_file = xgb_model_file
         print("Processing data...")
         self.train_data = self.process_data(train)
         self.valid_data = self.process_data(valid)
         self.test_data = self.process_data(test)
-        if model_file is None:
+        if xgb_model_file is None:
             print("No Model Given! Starting training process")
-            self.xgbmodel = self.train()
+            self.xgbmodel, self.calibrated_model = self.train()
         else:
-            print("Model found, loading...")
+            print("XGB Model found, loading...")
             self.xgbmodel = XGBClassifier()
             self.xgbmodel.load_model(fname=self.model_file)
 
-    def predict_one(self, x):
+        if calib_model_file is not None:
+            self.calibrated_model = joblib.load(calib_model_file)
+
+    def predict_one(self, x, calibrated=True):
         # x is a row from X
         # We presume x has been sanitised
-        return self.xgbmodel.predict_proba(x)[0][1]
+        # Use the calibrated model by default
+        return self.calibrated_model.predict_proba(x)[0][1] if calibrated else self.xgbmodel.predict_proba(x)[0][1] 
     
-    def predict_all(self, X):
-        return self.xgbmodel.predict_proba(X)[:, 1]
-
+    def predict_all(self, X, calibrated=True):
+        return self.calibrated_model.predict_proba(X)[:, 1] if calibrated else self.xgbmodel.predict_proba(X)[:, 1]
     
-    def eval(self, valid=False, calibrate=False):
+    def eval_features(self):
+        importances = self.xgbmodel.feature_importances_
+        feature_importance_df = pd.DataFrame({'Feature': FEATURES, 'Importance': importances})
+        print(feature_importance_df.sort_values(by='Importance', ascending=False))
+    
+    def eval(self, valid=False, calibrate_graph=False, calibrated=True, histogram=False):
         if valid:
             dataset = "validation"
             X_test = self.valid_data[FEATURES]
@@ -63,7 +72,7 @@ class ComebackCalculator():
             X_test = self.test_data[FEATURES]
             y_labels = self.test_data['Comeback_Occurred']
 
-        prob_all = self.predict_all(X_test)
+        prob_all = self.predict_all(X_test, calibrated=calibrated)
         y_pred = (prob_all > 0.5).astype(int)
         brier = brier_score_loss(y_labels, prob_all)
         accuracy = accuracy_score(y_labels, y_pred)
@@ -78,7 +87,7 @@ class ComebackCalculator():
         print(confusion_matrix(y_labels, y_pred))
         print(classification_report(y_labels, y_pred))
 
-        if calibrate:
+        if calibrate_graph:
             fraction_of_positives, mean_predicted_value = calibration_curve(y_labels, prob_all, n_bins=10)
             plt.figure(figsize=(8, 6))
             plt.plot(mean_predicted_value, fraction_of_positives, "s-", label="XGBoost")
@@ -89,6 +98,13 @@ class ComebackCalculator():
             plt.legend()
             plt.show()
 
+        if histogram:
+            plt.hist(prob_all, bins=10, edgecolor='black')
+            plt.title("Distribution of Comeback Predictions")
+            plt.xlabel("Predicted Probability")
+            plt.ylabel("Number of Games")
+            plt.show()
+
     def train(self):
         X = self.train_data[FEATURES]
         y = self.train_data['Comeback_Occurred']
@@ -96,9 +112,12 @@ class ComebackCalculator():
         xgbmodel = XGBClassifier(
             tree_method="hist",
             enable_categorical=True,
-            n_estimators=100,
-            learning_rate=0.1,
-            max_depth=5,
+            learning_rate=0.05,
+            max_depth=3,
+            reg_lambda=10,
+            gamma=1,
+            subsample=0.8,
+            colsample_bytree=0.8,
             eval_metric='logloss',
             scale_pos_weight=30
         )
@@ -106,7 +125,16 @@ class ComebackCalculator():
         xgbmodel.fit(X,y)
         self.model_file = "comeback_calc.json"
         xgbmodel.save_model(self.model_file)
-        return xgbmodel
+
+        calibrated = self.calibrate(xgbmodel, X, y)
+        joblib.dump(calibrated, 'calibrated_model.pkl')
+
+        return xgbmodel, calibrated
+    
+    def calibrate(self, model, train, labels):
+        calibrated = CalibratedClassifierCV(model, method='sigmoid', cv='prefit')
+        calibrated.fit(train,labels)
+        return calibrated
 
     def process_data(self, raw):
         cols = ['HomeTeam', 'AwayTeam', 'FTR', 'HTHG', 'HTAG', 'HTR', 'B365H', 'B365D', 'B365A']
@@ -158,4 +186,5 @@ if __name__ == "__main__":
     raw_test = pd.concat(test_dfs)
 
     cc = ComebackCalculator(raw_train, raw_valid, raw_test)
-    cc.eval(calibrate=True)
+    cc.eval(valid=True, calibrate_graph=True, histogram=True)
+    cc.eval_features()
