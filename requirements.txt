@@ -6,6 +6,7 @@ numpy
 scikit-learn
 scipy
 xgboost
+imblearn
 
 # understat wrapper
 understatapi
