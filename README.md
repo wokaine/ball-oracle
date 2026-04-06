@@ -1,6 +1,6 @@
 ## Contents
 - [Contents](#contents)
-- [BALL ORACLE v0.1.0](#ball-oracle-v010)
+- [BALL ORACLE v0.2.0](#ball-oracle-v020)
   - [About](#about)
   - [Hidden Gem Finder](#hidden-gem-finder)
   - [Comeback Calculator](#comeback-calculator)
@@ -11,7 +11,7 @@
     - [Run](#run)
   - [What's Next?](#whats-next)
 
-## BALL ORACLE v0.1.0
+## BALL ORACLE v0.2.0
 A collection of football themed machine learning projects presented in a terminal UI.
 
 Author: Freddie Butterfield (wokaine)
