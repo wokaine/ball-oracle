@@ -21,7 +21,7 @@ Author: Freddie Butterfield (wokaine)
 ### About
 For a while I was struggling to motivate myself to develop programs that were beyond what I was already doing at university. Then I had the realisation to combine my interests with computer science, and this project is the result of that.
 
-Ball oracle is a collection of various football analysis programs powered by fundamental machine learning concepts. Currently only one has been implemented: Hidden Gem Finder. I have plans to implement many more (so long as university does not get in the way).
+Ball oracle is a collection of various football analysis programs powered by fundamental machine learning concepts. Currently only two have been implemented: Hidden Gem Finder and Comeback Calculator. I have plans to implement many more (so long as university does not get in the way).
 
 The aim of this is not to provide an amazing tool for football clubs to use, but to rather employ my knowledge of machine learning on to a subject I'm quite interested in. I am limited by the fact that my football analysis knowledge is next-to-none and that I am using data from free sources, both of which will affect the performance and predictions that the tools provide.
 
