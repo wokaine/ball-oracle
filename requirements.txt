@@ -5,6 +5,8 @@ numpy
 # Machine Learning & Stats
 scikit-learn
 scipy
+xgboost
+imblearn
 
 # understat wrapper
 understatapi
