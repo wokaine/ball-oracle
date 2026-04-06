@@ -5,11 +5,12 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 from xgboost import XGBClassifier
-import xgboost as xgb
 from imblearn.over_sampling import SMOTE
+import os
 
 
 DATA_URLS = [
+    "https://www.football-data.co.uk/mmz4281/2425/E0.csv",
     "https://www.football-data.co.uk/mmz4281/2324/E0.csv",
     "https://www.football-data.co.uk/mmz4281/2223/E0.csv",
     "https://www.football-data.co.uk/mmz4281/2122/E0.csv",
@@ -31,25 +32,43 @@ DATA_URLS = [
     "https://www.football-data.co.uk/mmz4281/0506/E0.csv"
 ]
 
-FEATURES = ['Trailing_Team', 'Leading_Team', 'Trailing_Odds', 'Leading_Odds', 'Is_Trailing_Team_Home', 'Deficit', 'Odds_Diff']
+FEATURES = ['Trailing_Team', 'Leading_Team', 'Trailing_Odds', 'Leading_Odds', 'Is_Trailing_Team_Home', 'Deficit', 
+            'Odds_Diff', 'HS', 'AS', 'HST', 'AST', 'HF', 'AF', 'HC', 'AC', 'HY', 'AY', 'HR', 'AR']
 
 class ComebackCalculator():
-    def __init__(self, train, valid, test, xgb_model_file=None, calib_model_file=None):
-        self.model_file = xgb_model_file
-        print("Processing data...")
-        self.train_data = self.process_data(train)
-        self.valid_data = self.process_data(valid)
-        self.test_data = self.process_data(test)
-        if xgb_model_file is None:
-            print("No Model Given! Starting training process")
-            self.xgbmodel, self.calibrated_model = self.train(use_smote=True)
+    def __init__(self, train=None, valid=None, test=None, xgb_model_file=None, calib_model_file=None):
+
+        if train is not None and valid is not None and test is not None:
+            self.train_data = self.process_data(train)
+            self.valid_data = self.process_data(valid)
+            self.test_data = self.process_data(test)
         else:
+            train_dfs = [pd.read_csv(url) for url in DATA_URLS[3:]]
+            raw_train = pd.concat(train_dfs)
+            self.train_data = self.process_data(raw_train)
+
+            valid_dfs = [pd.read_csv(url) for url in DATA_URLS[1:3]]
+            raw_valid = pd.concat(valid_dfs)
+            self.valid_data = self.process_data(raw_valid)
+
+            test_dfs = [pd.read_csv(DATA_URLS[0])]
+            raw_test = pd.concat(test_dfs)
+            self.test_data = self.process_data(raw_test)
+
+        if xgb_model_file is not None:
+            self.model_file = xgb_model_file
             print("XGB Model found, loading...")
             self.xgbmodel = XGBClassifier()
             self.xgbmodel.load_model(fname=self.model_file)
+            if calib_model_file is not None:
+                self.calibrated_model = joblib.load(calib_model_file)
+            else:
+                print('Calibrated model not supplied! Training')
+                _, self.calibrated_model = self.train(use_smote=True)
+        else:
+            print("No Model Given! Starting training process")
+            self.xgbmodel, self.calibrated_model = self.train(use_smote=True)
 
-        if calib_model_file is not None:
-            self.calibrated_model = joblib.load(calib_model_file)
 
     def predict_one(self, x, calibrated=True):
         # x is a row from X
@@ -229,49 +248,82 @@ class ComebackCalculator():
 
         conditions = [home_trailing, away_trailing]
 
-        agnostic_df = pd.DataFrame()
-        # TEAM MAPPING: Who is trailing vs who is leading?
-        agnostic_df['Trailing_Team'] = np.select(conditions, [df['HomeTeam'], df['AwayTeam']], default='None')
-        agnostic_df['Leading_Team']  = np.select(conditions, [df['AwayTeam'], df['HomeTeam']], default='None')
-
-        # ODDS MAPPING: (Very important for determining if a favorite is behind)
-        # Use Bet365 as a basis as not all seasons have an average odds
-        agnostic_df['Trailing_Odds'] = np.select(conditions, [df['B365H'], df['B365A']], default=0)
-        agnostic_df['Leading_Odds']  = np.select(conditions, [df['B365A'], df['B365H']], default=0)
-
-        # HOME ADVANTAGE: Is the team that's behind currently playing at home?
-        agnostic_df['Is_Trailing_Team_Home'] = np.select(conditions, [1, 0], default=0)
-
-        # CONTEXT: What is the deficit?
-        agnostic_df['Deficit'] = np.abs(df['HTHG'].values - df['HTAG'].values)
-        agnostic_df['Odds_Diff'] = agnostic_df['Trailing_Odds'] - agnostic_df['Leading_Odds']
+        df['Trailing_Team'] = np.select(conditions, [df['HomeTeam'], df['AwayTeam']], default='None')
+        df['Leading_Team']  = np.select(conditions, [df['AwayTeam'], df['HomeTeam']], default='None')
+        df['Trailing_Odds'] = np.select(conditions, [df['B365H'], df['B365A']], default=0)
+        df['Leading_Odds']  = np.select(conditions, [df['B365A'], df['B365H']], default=0)
+        df['Is_Trailing_Team_Home'] = np.select(conditions, [1, 0], default=0)
+        df['Deficit'] = np.abs(df['HTHG'].values - df['HTAG'].values)
+        df['Odds_Diff'] = df['Trailing_Odds'] - df['Leading_Odds']
 
         # THE TARGET: Did the team that was trailing actually go on to WIN?
         choices_win = [
             (df['FTR'] == 'H').astype(int), # did H end up winning?
             (df['FTR'] == 'A').astype(int)  # did A end up winning?
         ]
-        agnostic_df['Comeback_Occurred'] = np.select(conditions, choices_win, default=0)
+        df['Comeback_Occurred'] = np.select(conditions, choices_win, default=0)
 
-        # 4. FINAL STEP: Drop the 'None' rows (Draws)
-        # This keeps only the games where a comeback was actually possible
-        agnostic_df = agnostic_df[agnostic_df['Trailing_Team'] != 'None'].copy()
-        for col in agnostic_df.select_dtypes(['object']).columns:
-            agnostic_df[col] = agnostic_df[col].astype('category')
-        return agnostic_df
+        # Remove draws
+        df = df[df['Trailing_Team'] != 'None'].copy()
+        for col in df.select_dtypes(['object']).columns:
+            df[col] = df[col].astype('category')
+        return df
     
+    def select_matches(self, raw):
+        """
+        Simply just select the matches where comebacks were possible and keep the match info
+        """
+        df = raw.copy()
+        mask = (
+            ((df['HTHG'] < df['HTAG'])) |
+            ((df['HTHG'] > df['HTAG']))
+        )
+        return df[mask]
+
+
+    def predict_season(self, season_csv, display=False):
+        """
+        Process, predict, and format an entire season's worth of comeback results
+
+        Helpful for the UI
+        """
+        csv_clean = self.process_data(season_csv)
+        X_test = csv_clean[FEATURES]
+        y_labels = csv_clean['Comeback_Occurred']
+        matches = self.select_matches(season_csv)
+        prob_all = self.predict_all(X_test, calibrated=True)
+        threshold = self.tune_threshold(valid=True)
+        y_pred = (prob_all > threshold).astype(int)
+
+        # Append predictions and actual outcome to match
+        matches.insert(len(matches.columns), "Model_Prediction", y_pred)
+        matches.insert(len(matches.columns), "Comeback_Probability", prob_all)
+        matches.insert(len(matches.columns), "Actual_Outcome", y_labels)
+
+        if display:
+            for _, m in matches.iterrows():
+                print(f"==== {m['Date']} | {m['Time']} ====")
+                print(f"{m['HomeTeam']} vs. {m['AwayTeam']}")
+                print(f"HALF-TIME RESULT: {m['HTHG']} - {m['HTAG']}")
+                print(f"FULL-TIME RESULT: {m['FTHG']} - {m['FTAG']}")
+                format_prediction = "Comeback" if m['Model_Prediction'] else "No Comeback"
+                print(f"MODEL PREDICTON: {format_prediction} with probability {m['Comeback_Probability']}")
+
+                format_outcome = "Comeback" if m['Actual_Outcome'] else "No Comeback"
+                print(f"ACTUAL OUTCOME: {format_outcome}\n")
+
+        return matches
 if __name__ == "__main__":
-    train_dfs = [pd.read_csv(url) for url in DATA_URLS[3:]]
-    raw_train = pd.concat(train_dfs)
-
-    valid_dfs = [pd.read_csv(url) for url in DATA_URLS[1:3]]
-    raw_valid = pd.concat(valid_dfs)
-
-    test_dfs = [pd.read_csv(DATA_URLS[0])]
-    raw_test = pd.concat(test_dfs)
-
-    cc = ComebackCalculator(raw_train, raw_valid, raw_test)
+    #cc = ComebackCalculator(train=raw_train, valid=raw_valid, test=raw_test)
     # Retrain with SMOTE and better defaults (will overwrite model trained in __init__ if present)
     # Diagnostics and evaluation
-    cc.diagnostics(dataset='validation', plot=True)
-    cc.eval(valid=True, calibrate_graph=True)
+    #cc.diagnostics(dataset='validation', plot=True)
+    #cc.eval(valid=True, calibrate_graph=True)
+
+    xgb_file = os.path.abspath("comeback_calc.json")
+    calib_file = os.path.abspath("calibrated_model.pkl")
+    cc = ComebackCalculator(xgb_model_file=xgb_file, calib_model_file=calib_file)
+
+    # test: get the 2526 
+    tfts = pd.read_csv("https://www.football-data.co.uk/mmz4281/2526/E0.csv")
+    matches = cc.predict_season(tfts, display=True)

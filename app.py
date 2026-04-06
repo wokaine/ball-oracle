@@ -1,15 +1,20 @@
+# Textual
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll, HorizontalScroll
-from textual.widgets import Header, Static, Footer, OptionList, Placeholder, Checkbox, Button, Input
+from textual.widgets import Header, Static, Footer, OptionList, Placeholder, Checkbox, Button, Input, LoadingIndicator
 from textual.screen import Screen
 from textual_pandas.widgets import DataFrameTable
 from textual.widgets.option_list import Option
+
+# Generic imports
 import random
 import constants
-from lib import utils
-from hiddengemfinder.hidden_gem_finder import HiddenGemFinder
+import os
+import pandas as pd
 
-from textual import log
+# Custom
+from hiddengemfinder.hidden_gem_finder import HiddenGemFinder
+from comebackcalc.comeback_calculator import ComebackCalculator
 
 ############################
 ### MAIN MENU COMPONENTS ###
@@ -30,7 +35,7 @@ class ProgramMenu(Vertical):
         yield Static("[reverse] PROGRAM SELECT [/]")
         yield OptionList(
             Option("Hidden Gem Finder", id="hgf"),
-            Option("Comeback Calculator (WIP)", id="cbc"),
+            Option("Comeback Calculator", id="cbc"),
             Option("Market Value Predictor (WIP)", id="mvp"),
             id="main-menu-list"
         )
@@ -120,11 +125,52 @@ class HiddenGemFinderScreen(Screen):
 ### COMEBACK CALCULATOR COMPONENTS ###
 ######################################
 
+class CCHeader(Static):
+    def compose(self) -> ComposeResult:
+        yield Static(constants.MOTD_CC, id="cc-ascii-art", expand=True)
 
-class ComebackCalculator(Screen):
+class CCAbout(Static):
+    def compose(self) -> ComposeResult:
+        yield Static(constants.ABOUT_CC, id="cc-about")
+
+class CCBody(Static):
+    def __init__(self) -> None:
+        super().__init__()
+        xgb_file = os.path.abspath("comeback_calc.json")
+        calib_file = os.path.abspath("calibrated_model.pkl")
+        self.cc = ComebackCalculator(xgb_model_file=xgb_file, calib_model_file=calib_file)
+
+        # Data from the 25/26 season thus far
+        tfts = pd.read_csv("https://www.football-data.co.uk/mmz4281/2526/E0.csv")
+        self.matches = self.cc.predict_season(tfts)
+
+    def compose(self) -> ComposeResult:
+        with VerticalScroll(id="cc-vscroll"):
+            for _, m in self.matches.iterrows():
+                yield CCMatch(match=m)
+        
+class CCMatch(Static):
+    def __init__(self, match):
+        super().__init__()
+        self.match = match
+ 
+    def compose(self) -> ComposeResult:
+        yield Static(f"==== {self.match['Date']} | {self.match['Time']} ====")
+        yield Static(f"{self.match['HomeTeam']} vs. {self.match['AwayTeam']}")
+        yield Static(f"HALF-TIME RESULT: {self.match['HTHG']} - {self.match['HTAG']}")
+        yield Static(f"FULL-TIME RESULT: {self.match['FTHG']} - {self.match['FTAG']}")
+        format_prediction = "Comeback" if self.match['Model_Prediction'] else "No Comeback"
+        yield Static(f"MODEL PREDICTON: {format_prediction} with probability {self.match['Comeback_Probability']:.4f}")
+        format_outcome = "Comeback" if self.match['Actual_Outcome'] else "No Comeback"
+        yield Static(f"ACTUAL OUTCOME: {format_outcome}\n")
+
+class ComebackCalculatorScreen(Screen):
     def compose(self) -> ComposeResult:
         yield Header()
-        yield Placeholder("Comeback Calculator")
+        with Horizontal(id="cc-top-section", classes="top"):
+            yield CCHeader(classes="header")
+            yield CCAbout(classes="about")
+        yield CCBody()
         yield Footer()
 
 #########################################
@@ -145,7 +191,7 @@ class BallOracle(App):
     MODES = {
         "main menu": MainMenu,
         "hgf": HiddenGemFinderScreen,
-        "cbc": ComebackCalculator,
+        "cbc": ComebackCalculatorScreen,
         "mvp": MarketValuePredictor
     }
 

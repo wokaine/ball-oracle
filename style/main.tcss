@@ -14,17 +14,25 @@
 }
 
 .header {
-    width: 60%;      /* Limit the ASCII art to 60% of the screen */
+    width: 50%;
     height: 100%;
     padding: 1;
 }
 
 .about {
-    width: 40%;      /* Give the About text the remaining 40% */
-    height: 100%;
+    width: 50%;
+    height: auto;
     padding: 1;
     border-left: solid $primary;
     border-bottom: solid $primary;
+}
+
+.match {
+    align: center middle;
+}
+
+CCBody {
+    border-top: solid $primary;
 }
 
 HGFLeft {
